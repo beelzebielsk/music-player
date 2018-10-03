@@ -9,12 +9,23 @@ FILE* createDiskFile(char* filename, size_t blocks) {
         //err(errno, "%s", "createDiskFile could not open file");
         return NULL;
     }
-    size_t bytesWritten = fwrite("\0", 1, BLOCKSIZE * blocks, diskFile);
-    if (bytesWritten < BLOCKSIZE * blocks) {
+    size_t bytesToWrite = BLOCKSIZE * blocks;
+    const void * data = (void*)"";
+    size_t bytesWritten = fwrite(data, 1, bytesToWrite, diskFile);
+    for (int i = 0; i < bytesToWrite; i++) {
+        fputc('\0', diskFile);
+    }
+    /* This didn't work because you don't read the exact same
+     * size-wide region of memory over and over again. You read
+     * consecutive regions of memory from the buffer, each of which is
+     * size-wide, where size is the 2nd argument to fwrite.
+    fwrite(data, 1, bytesToWrite, diskFile); 
+    if (bytesWritten < bytesToWrite) {
         perror("createDiskFile could not write to file");
         //err(errno, "%s", "createDiskFile could not open file");
         return NULL;
     }
+    */
     int status = syncDisk(diskFile);
     if (status < 0) {
         perror("createDiskFile could not sync file");
@@ -34,8 +45,8 @@ FILE* openDisk(char* filename, size_t blocks) {
 
 int readBlock(FILE* disk, size_t blockNumber, void* buffer) {
     fseek(disk, BLOCKSIZE * blockNumber, SEEK_SET);
-    fread(buffer, BLOCKSIZE, 1, disk);
-    if (ferror(disk)) {
+    int blocksRead = fread(buffer, BLOCKSIZE, 1, disk);
+    if (blocksRead < 1) {
         perror("readBlock could not read disk");
         return -1;
     }

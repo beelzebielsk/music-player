@@ -22,6 +22,8 @@
 /* err
  */
 
+#include <stdbool.h>
+
 #define testBlocks 10
 
 int catString(char * s1, char * s2, char ** result) {
@@ -57,7 +59,11 @@ main() {
     char buffers[testBlocks][BLOCKSIZE];
 
     for (int i = 0; i < testBlocks; i++) {
-        fread(buffers[i], 1, BLOCKSIZE, testData);
+        int amountRead = fread(buffers[i], 1, BLOCKSIZE, testData);
+        if (amountRead < BLOCKSIZE) {
+            perror("Reading from /dev/urandom failed");
+            return -1;
+        }
         int status = writeBlock(disk, i, (void*)buffers[i]);
         if (status < 0) {
             err(1, "write of block %d failed", i);
@@ -65,14 +71,15 @@ main() {
     }
 
     char blockBuffer[BLOCKSIZE];
-    for (int i = 9; i >= 0; i--) {
+    bool allReadsSuccessful = true;
+    for (int i = testBlocks - 1; i >= 0; i--) {
         readBlock(disk, i, (void*)blockBuffer);
-        /*
-           if(memcmp(buffers[i], blockBuffer, BLOCKSIZE) != 0) {
-           err(1, "Read or write of block %d failed", i);
-           }
-           */
+        if(memcmp(buffers[i], blockBuffer, BLOCKSIZE) != 0) {
+            warn("Read or write of block %d failed", i);
+            allReadsSuccessful = false;
+        }
     }
+    if (!allReadsSuccessful) return -1;
 
     syncDisk(disk);
 }
