@@ -66,10 +66,63 @@ typedef BitVector FreeList;
 
 typedef enum {file, directory} InodeType;
 
+/* The information contained in an inode should probably be different
+ * for directories and files. Directories should contain other Inodes,
+ * I guess. Files should contain blocks. I could include a pointer to
+ * both here. If I have a directory, then the InodeType is directory.
+ * If I have a file, then the InodeType is file. For files, the block
+ * pointer is non-null. For directories, the inodes pointer is
+ * non-null. When I serialize, I need only write out the correct
+ * pointer. Thus size in memory doesn't have to translate to size in
+ * serialization.
+ */
 typedef struct {
     size_t id;
-    size_t* blocks;
     InodeType type;
+    size_t* blocks;
+    Inode* containedNodes;
 } Inode;
+
+/* Storage of inodes:
+ * - In order to make a reasonable filesystem, I have to be able to
+ *   grow and shrink the storage space of an inode while doing the
+ *   minimum amount of writing. The more I have to write to disk to
+ *   update Inodes, the longer disk operations take.
+ * 
+ * Issues:
+ * - In order to grow an inode, I may have to shift later inodes
+ *   upward in the file.
+ *      - Fixed-length inodes is a possibility (maximum file size,
+ *        maximum directory size).
+ * - There is not technically a finite number of inodes that can be
+ *   created. There are links, there are directories, there are empty
+ *   files. Empty files are the most pernicious because I ought to be
+ *   able to make infinity of them. They don't take up any real space,
+ *   aside from their inodes. So I can't just make an assumption about
+ *   how many inodes there will be:
+ *      - Decide on an inode cap. Create enough space for those. Mixed
+ *        with fixed-length inodes, this gives you an upper-bound on
+ *        the size of the inodes, and I can now allocate physical
+ *        space for them.
+ * 
+ * Interestingly, the ext4 file system seems to do exactly what I've
+ * done. It has a max number of inodes that the user sets, and there's
+ * a pre-determined amount of space allocated to each inode. The
+ * defaults of my file systems is located in /etc/mke2fs.conf:
+ * - block size of 4KiB.
+ * - inode size of 256 bytes.
+ * - inode ratio of 16384. I'm not sure what this is. For mkfs.ext4,
+ *   it's bytes/per/inode. I guess that's the inode size? Nope. Create
+ *   one inode for every so many bytes on the disk. What the fuck?
+ *   Each inode is 256 bytes of size. 16384 = 2^14. So for every 2^14
+ *   bytes of space on the disk, there's an inode of 2^8 bytes of
+ *   size. How much space is left on the disk for FILES? How does that
+ *   ratio even work? Is that for USABLE bytes, or even for the bytes
+ *   on which an inode would reside (and other FS information?). The
+ *   manpage says not to make the ratio smaller than the blocksize. If
+ *   we did, then there'd be more inodes than blocks "since in that
+ *   case more inodes would be made than can ever be used". I wonder
+ *   why that is, exactly.
+ */
 
 #endif
