@@ -242,3 +242,65 @@ really know better than the OS for your particular application.
 
 Interesting. Here, directories are responsible for mapping
 user-readable names to inodes.
+
+operations
+
+◊l{
+- open: Creates a new file. Can specify an open mode for the file and
+permissions
+- read: Reads data from a file, which is identified by a file
+descriptor.
+- write: writes data from a file, which is identified by a file
+descriptor.
+- lseek: similar to fseek, except uses an FD. The offset has a
+different type: ◊code{off_t}. Not sure what that is or means.
+- fsync: Syncs unwritten data to the disk that the data lives on.
+- rename: In ◊header{stdio}. Renames a file from one name to another.
+Apparently replaces a file if a file of that name already exists.
+- mkdir: Creates a directory. Contained in ◊header{sys/stat}.
+- opendir: Opens a directory, returning a pointer to the directory.
+Similar to FILE pointers, there are DIR pointers. They're both opaque
+types that I know nothing about.
+- readdir: This is like the analogue of read, but for directories. You
+read the next file in a directory. I guess the "current" file is
+stored somewhere that's pointed to by the directory pointer. Whenever
+readdir is called, that current file pointer is updated.
+}
+
+file pointers are like pointers to files. IIRC, each process's process
+control block maintains a table of file info, indexed by file
+pointers. FDs are local to each process because of that.
+
+FDs are associated with an offset into a file. This offset specifies
+where in the file you "are": where the next read/write will take
+place. The offset gets advanced by ◊code{reads} and ◊code{writes}, or
+can be changed to a chosen location via ◊code{lseek}.
+
+◊note{filesystems must maintain some record of dirty blocks. Blocks
+with modifications made to them.
+
+◊todo{Check out references P+13 and P+14. I never knew that fsync
+should be applied to the parent dir, too.}
+
+477 -
+
+◊q{
+What's the difference between the st_dev and st_ino fields? Isn't an
+inode number essentially an id number?
+}
+
+◊todo{Check out the system calls used to report file metadata using
+◊code{stat}}
+
+Apparently, directories actually contain references to themselves. I
+suppose that, if directories are mappings from human-readable names to
+inodes, then each directory maps ◊code{.} to the inode representing
+itself and ◊code{..} to the inode representing it's parent.
+
+480 -
+
+◊q{
+What's the "offset to the next dirent" mean here? Offset in size? In
+inode? Offset relative to what? Moreover, why would different files
+have different offsets? If each inode is of a fixed size, and 
+}

@@ -1,6 +1,9 @@
 Project Ideas
 -------------
 
+This is a general collection of thoughts/desires for the project. The
+requirements will take shape from this section.
+
 Global watch later list. I can put music into it from a variety of
 sources (various streaming links like youtube, reference to a local
 file at home, song from a torrent, directly specify a song/album name
@@ -110,46 +113,94 @@ prediction). Caching is not yet essential. I don't have a huge
 collection, any device I listen to music on should have at least 30~40
 GB free. As the collection grows, it will likely become essential.
 
+Rough Org of Ideas
+==================
+
+- Caching
+    - Global Watch Later list: This is a cache hint. The point of this
+      list is to inform the program to cache the most recent/least
+      recent entries on this list onto all active devices.
+    - Not physically storing all data on each device is about caching.
+      You don't store all of it, and if you only do cache hits, then
+      the illusion works. If you don't, then the illusion breaks
+      temporarily.
+- Distributed Storage
+    - Have access to same music collection across diff devices. Be
+      able to modify/delete/add files on one device and see changes on
+      another device.
+    - Two peers on the same local network sharing changes.
+    - Access to locally stored files for listening.
+- Handling multiple sources
+    - There's multiple places/ways to get music from, I'd like to be
+      able to deal with all of them in a uniform manner. I don't want
+      to think about where a song I found was.
+- Streaming files
+    - Listening to files with either slow and consistent network
+      connection or fast and spotty network connection. 
+
+Approaches
+----------
+
+Different ways of going about the project.
+
+File System
+===========
+
+This approach might be the most flexible, kinda. I don't want to build
+a music player. Nor do I want to build a streaming service.
+
+With this approach, I build a filesystem that can be mounted on a
+device. Whenever the host system requests data from a file, the file
+system fetches file data from...
+
+- Local cache, if the data was cached
+- From filesystem peers: any other device that's on and also has the
+  filesystem mounted.
+
+Instead of physically storing all the data of every file on disk, the
+filesystem only ever stores a cache of recently-fetched blocks,
+despite having access to all of the files.
+
+It would be nice if this lent itself to streaming as well. Basically,
+the blocks are fetched on demand in sequential order. If a program
+were to suddenly request a block from later in the file, then the fs
+changes priorities and fetches that block. A lot like streaming.
+
+Benefits:
+
+- Avoid having to create a streaming application for music.
+- Could apply this filesystem idea to other media that I'd want total
+  access to but wouldn't want to store the whole thing all at once.
+  Textbooks and video lectures in particular.
+
+Cons:
+
+- I don't think every device would support a custom filesystem.
+- I'd have to reimplement the fs on every device that I'd want to use
+  it on. Some devices may be harder than others.
+- FSes might not be flexible enough for what I want. There's a strict
+  API for FSes to adhere to. So I might not be able to do what I want.
+- Streaming might be impossible. Chances are a program will load as
+  much of a file as it can. In the end, I might just be re-creating
+  something like SSHFS, but with caching and p2p.
+- I don't think all FS concepts would make sense, like permissions.
+
+Music Player
+============
+
+I think I could pair this with VLC in particular. It's a pretty good
+application, available on a wide array of devices, codecs created for
+me. I'd just have to learn how to stream files with it.
+
+The only real diff I can see between building new/using existing
+player is where the streaming logic gets placed. Making an application
+that can share all of these files is still kinda like a filesystem.
+
 Next Steps
 ----------
 
 - Look for existing solutions close to your whole project. Maybe
   there's a halfway-done abandoned project with similar aims.
-    - Google Play Music
-        - Summary of the below sources: 
-            - What it has: It allows me to listen to my own songs, and
-              caches recently-listened-to music. Streams the files I
-              want to share. 50K song limit. If I use this in a
-              serious way, I'll hit this cap soon enough. I can also
-              use this on a desktop with a GPM desktop player.
-            - Lacking: The ability to search through disparate sources
-              for songs, download them from those sources. It doesn't
-              play music from my own local computers. It will store
-              those files on Google's network. If their network goes
-              down, if they stop the application's servers then my
-              music stops. I can't add to the collection from my
-              laptop (perhaps from my desktop).
-        - <https://lifehacker.com/5824193/five-best-streaming-music-services>
-        - Google Play Music might be close. Must look at this more. I
-        don't want to pay, though, and I don't want ads.
-        - <https://www.makeuseof.com/tag/google-play-music-features/>
-        - For free, I can upload songs to their database and listen to
-          it from anywhere. 50K song limit.
-            - Format whitelist: MP3, AAC, WMA, FLAC, Ogg, and ALAC.
-        - To stream songs from their collection, I have to pay (\$10
-          month as of Fri Sep 21 16:14:37 EDT 2018).
-        - I can't upload songs from disparate sources. I'd have to
-          download them 1st.
-        - I can download songs for offline play. I'm not sure I'll
-          have the caching mechanism that I'd want, where I can go
-          back to a song I just played a few minutes or hours ago.
-        - <https://www.techrepublic.com/article/pro-tip-manage-google-play-music-for-easier-transition-between-online-and-offline-modes/>
-          GPM does indeed cache recently-listened-to songs. I wonder
-          how much space it will use?
-    - <http://pansentient.com/2011/11/how-to-hear-your-local-music-anywhere-with-spotify-and-dropbox/>
-        - Spotify might be capable of it, too, if combined with
-          dropbox.  This news is 7 years old. TODO: Check if this
-          still works.
 - Look for "streaming filesystem". See if there's something that
   kinda/sorta acts like a filesystem where not everything is always
   stored on your computer. Like an fs cache where you can pull files
@@ -296,8 +347,52 @@ Other Candidates:
           a good reference, especially for a music player which
           streams stuff.
 
+Google Play Music
+=================
+
+Summary:
+
+- What it has: It allows me to listen to my own songs, and caches
+  recently-listened-to music. Streams the files I want to share. 50K
+  song limit. If I use this in a serious way, I'll hit this cap soon
+  enough. I can also use this on a desktop with a GPM desktop player.
+- Lacking: The ability to search through disparate sources for songs,
+  download them from those sources. It doesn't play music from my own
+  local computers. It will store those files on Google's network. If
+  their network goes down, if they stop the application's servers then
+  my music stops. I can't add to the collection from my laptop
+  (perhaps from my desktop).
+
+Sources:
+
+- Summary of the below sources: 
+- <https://lifehacker.com/5824193/five-best-streaming-music-services>
+- Google Play Music might be close. Must look at this more. I
+don't want to pay, though, and I don't want ads.
+- <https://www.makeuseof.com/tag/google-play-music-features/>
+- For free, I can upload songs to their database and listen to
+  it from anywhere. 50K song limit.
+    - Format whitelist: MP3, AAC, WMA, FLAC, Ogg, and ALAC.
+- To stream songs from their collection, I have to pay (\$10
+  month as of Fri Sep 21 16:14:37 EDT 2018).
+- I can't upload songs from disparate sources. I'd have to
+  download them 1st.
+- I can download songs for offline play. I'm not sure I'll
+  have the caching mechanism that I'd want, where I can go
+  back to a song I just played a few minutes or hours ago.
+- <https://www.techrepublic.com/article/pro-tip-manage-google-play-music-for-easier-transition-between-online-and-offline-modes/>
+  GPM does indeed cache recently-listened-to songs. I wonder
+  how much space it will use?
+
+Spotify
+=======
+
+- <http://pansentient.com/2011/11/how-to-hear-your-local-music-anywhere-with-spotify-and-dropbox/>
+    - Spotify might be capable of it, too, if combined with dropbox.
+      This news is 7 years old. TODO: Check if this still works.
+
 Original
-========
+--------
 
 The original idea for a music player was just to download music from
 youtube using youtube-dl, quickly get decent metadata info using
