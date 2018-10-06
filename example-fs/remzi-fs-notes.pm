@@ -265,6 +265,18 @@ types that I know nothing about.
 read the next file in a directory. I guess the "current" file is
 stored somewhere that's pointed to by the directory pointer. Whenever
 readdir is called, that current file pointer is updated.
+- link: Takes in an old and new pathname. Creates a new file at the
+new pathname which has the same inode as the file from the old
+pathname. So, now there's two human-readable names you can use to
+refer to the same underlying file. The file is identified by it's
+inode number, because the inode is the data structure that keeps track
+of file information.
+- unlink: Takes in a pathname and "deletes" the file. In truth, what
+it does is unlinks the human-readable name from the inode related to
+that name. I assume that if there are no other files related to that
+given inode, then the inode is deleted too, and as such the whole file
+is actually deleted. Wait, inodes aren't deleted. They're deallocated
+from the given file.
 }
 
 file pointers are like pointers to files. IIRC, each process's process
@@ -303,4 +315,26 @@ itself and ◊code{..} to the inode representing it's parent.
 What's the "offset to the next dirent" mean here? Offset in size? In
 inode? Offset relative to what? Moreover, why would different files
 have different offsets? If each inode is of a fixed size, and 
+}
+
+482 -
+
+So, hardlinks map a second human-readable name onto the inode of
+another file. softlinks map a second human-readable name onto a 1st
+human-readable name.
+
+softlink files hold the path that they link to as their data. So
+softlinks to larger pathnames (as in more characters) are larger than
+softlinks to shorter pathnames.
+
+◊chapter{40}
+
+488 -
+
+Keep track of the answers to the following two questions:
+
+◊l{
+- What are the data structures of the file system?
+- How do the common system calls interact with/modify the data
+structures of the file system?
 }
