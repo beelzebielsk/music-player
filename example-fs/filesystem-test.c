@@ -1,5 +1,18 @@
+#include <stdio.h>
+#include "filesystem.h"
+
+#define assert(test, message) {if (!test) fprintf(stderr, message);} while(0)
+
 int
 main() {
+    size_t diskBlocks = 4000;
+    size_t expectedDiskSize = 4000 * BLOCKSIZE;
+    FILE* disk = mkfs(diskBlocks);
+
+    // Test disk file size:
+    fseek(disk, 0, SEEK_END);
+    size_t actualDiskSize = ftell(disk);
+    assert(expectedDiskSize == actualDiskSize, "Disk size test");
     return 0;
 }
 
