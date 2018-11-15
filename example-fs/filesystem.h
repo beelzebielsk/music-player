@@ -69,33 +69,10 @@ typedef struct {
     char * bits; 
 } BitVector;
 
-long lceilint(double num) {
-    int oldRoundingStyle = fegetround();
-    fesetround(FE_UPWARD);
-    long result = lrint(num);
-    fesetround(oldRoundingStyle);
-    return result;
-}
+long lceilint(double num);
 
-BitVector* createBitVector(size_t numBits) {
-    BitVector* bv = malloc(sizeof(BitVector));
-    if (!bv) return NULL;
-
-    long vectorSize = lceilint((double)numBits / 8.);
-    bv->length = numBits;
-    bv->capacity = vectorSize * 8;
-    bv->bits = malloc(sizeof(char) * vectorSize);
-
-    if (bv->bits == NULL) {
-        free(bv); return NULL;
-    }
-    return bv;
-}
-
-void freeBitVector(BitVector* bv) {
-    free(bv->bits);
-    free(bv);
-}
+BitVector* createBitVector(size_t numBits);
+void freeBitVector(BitVector* bv);
 
 /* Returns the amount of space the bit vector will take on disk. This
  * assumes that the bitvector's capacity is written out, and then the
@@ -105,35 +82,15 @@ void freeBitVector(BitVector* bv) {
  * ===========
  * bv, BitVector* : Pointer to the bitvector to measure.
  */
-size_t BitVectorSize(BitVector* bv) {
-    if (bv == NULL) return 0;
-    return bv->capacity / 8;
-}
+size_t BitVectorSize(BitVector* bv);
 
-void setBitOfByte(char* v, size_t position, bool bit) {
-    char setWith = 1 << position;
-    if (bit) {
-        *v |= setWith;
-    } else {
-        *v &= ~setWith;
-    }
-}
+void setBitOfByte(char* v, size_t position, bool bit) ;
 
-bool getBitOfByte(char v, size_t position) {
-    return (v & (1 << position)) >> position;
-}
+bool getBitOfByte(char v, size_t position) ;
 
-bool setBit(BitVector* v, size_t position, bool bit) {
-    size_t bytePos = position / 8;
-    size_t bitPos = position % 8;
-    setBitOfByte((v->bits) + bytePos, bitPos, bit);
-}
+bool setBit(BitVector* v, size_t position, bool bit) ;
 
-bool getBit(BitVector* v, size_t position) {
-    size_t bytePos = position / 8;
-    size_t bitPos = position % 8;
-    return getBitOfByte(*(v->bits + bytePos), bitPos);
-}
+bool getBit(BitVector* v, size_t position) ;
 
 /* Sets the values of all the bits of the bitvector.
  * Parameters:
@@ -141,14 +98,7 @@ bool getBit(BitVector* v, size_t position) {
  * BitVector* v : The vector to set the values for.
  * bool value : The value to set all the bits to.
  */
-void setVector(BitVector* v, bool value) {
-    size_t bytes = v->capacity / 8;
-    if (value) {
-        memset(v->bits, (char)0, bytes);
-    } else {
-        memset(v->bits, (char)255, bytes);
-    }
-}
+void setVector(BitVector* v, bool value) ;
 
 typedef BitVector FreeList;
 
@@ -229,7 +179,7 @@ typedef struct {
  * diskBlocks, size_t : The number of blocks that the disk will use,
  *      in total.
  */
-FILE* mkfs(size_t diskBlocks);
+FILE* mkfs(char * filename, size_t diskBlocks);
 
 /* - Create a file
  * - Create a directory

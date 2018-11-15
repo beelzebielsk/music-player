@@ -57,6 +57,74 @@
  *   calculated using the inode number.
  */
 
+long lceilint(double num) {
+    int oldRoundingStyle = fegetround();
+    fesetround(FE_UPWARD);
+    long result = lrint(num);
+    fesetround(oldRoundingStyle);
+    return result;
+}
+
+BitVector* createBitVector(size_t numBits) {
+    BitVector* bv = malloc(sizeof(BitVector));
+    if (!bv) return NULL;
+
+    long vectorSize = lceilint((double)numBits / 8.);
+    bv->length = numBits;
+    bv->capacity = vectorSize * 8;
+    bv->bits = malloc(sizeof(char) * vectorSize);
+
+    if (bv->bits == NULL) {
+        free(bv); return NULL;
+    }
+    return bv;
+}
+
+void freeBitVector(BitVector* bv) {
+    free(bv->bits);
+    free(bv);
+}
+
+size_t BitVectorSize(BitVector* bv) {
+    if (bv == NULL) return 0;
+    return bv->capacity / 8;
+}
+
+void setBitOfByte(char* v, size_t position, bool bit) {
+    char setWith = 1 << position;
+    if (bit) {
+        *v |= setWith;
+    } else {
+        *v &= ~setWith;
+    }
+}
+
+bool getBitOfByte(char v, size_t position) {
+    return (v & (1 << position)) >> position;
+}
+
+bool setBit(BitVector* v, size_t position, bool bit) {
+    size_t bytePos = position / 8;
+    size_t bitPos = position % 8;
+    setBitOfByte((v->bits) + bytePos, bitPos, bit);
+}
+
+bool getBit(BitVector* v, size_t position) {
+    size_t bytePos = position / 8;
+    size_t bitPos = position % 8;
+    return getBitOfByte(*(v->bits + bytePos), bitPos);
+}
+
+void setVector(BitVector* v, bool value) {
+    size_t bytes = v->capacity / 8;
+    if (value) {
+        memset(v->bits, (char)0, bytes);
+    } else {
+        memset(v->bits, (char)255, bytes);
+    }
+}
+
+
 #define writeInfo(thing, file) fwrite(&thing, sizeof(thing), 1, file)
 
 int getBlockSize(int bytes) {
@@ -93,29 +161,30 @@ void writeSuperBlock(struct superBlockData* data, FILE* disk) {
     writeInfo(data->numInodes, disk);
     writeInfo(data->inodeTableStart, disk);
     writeInfo(data->inodeFreeListStart, disk);
+    writeInfo(data->blockListStart, disk);
     writeInfo(data->dataBlocksStart, disk);
 }
 
 void readSuperBlock(struct superBlockData** data, FILE* disk) {
-    data = malloc(sizeof(struct superBlockData));
+    *data = malloc(sizeof(struct superBlockData));
     if (!data) {
         return;
     }
-    char sizetBuffer[sizeof(size_t)];
     size_t bufSize = sizeof(size_t);
+    size_t* sizetBuffer = malloc(bufSize);
     fseek(disk, 0, SEEK_SET);
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->diskBlocks = (size_t) sizetBuffer;
+    (*data)->diskBlocks = *sizetBuffer;
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->numInodes = (size_t) sizetBuffer;
+    (*data)->numInodes = *sizetBuffer;
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->inodeTableStart = (size_t) sizetBuffer;
+    (*data)->inodeTableStart = *sizetBuffer;
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->inodeFreeListStart = (size_t) sizetBuffer;
+    (*data)->inodeFreeListStart = *sizetBuffer;
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->blockListStart = (size_t) sizetBuffer;
+    (*data)->blockListStart = *sizetBuffer;
     fread(sizetBuffer, bufSize, 1, disk);
-    (*data)->dataBlocksStart = (size_t) sizetBuffer;
+    (*data)->dataBlocksStart = *sizetBuffer;
 }
 
 // TODO: Find a better calculation.
@@ -123,9 +192,9 @@ size_t getNumInodes(size_t diskBlocks) {
     return 2000;
 }
 
-FILE* mkfs(size_t diskBlocks) {
+FILE* mkfs(char * filename, size_t diskBlocks) {
     // Create disk file.
-    FILE* disk = createDiskFile("filesystem", diskBlocks);
+    FILE* disk = createDiskFile(filename, diskBlocks);
     struct superBlockData sbData;
     sbData.diskBlocks = diskBlocks;
     size_t numInodes = getNumInodes(diskBlocks);
@@ -169,10 +238,6 @@ FILE* mkfs(size_t diskBlocks) {
     fseek(disk, blockListStart * BLOCKSIZE, SEEK_SET);
     fwrite(blockList->bits, 1, BitVectorSize(blockList), disk);
     
-    // allocate blocks for inode table. DONE
-    // Create inode freelist and allocate blocks for it. DONE
-    // Create block freelist and allocate blocks for it. DONE
-    // Write inode freelist to inode freelist blocks. DONE
-    // Write block freelist to block freelist blocks. DONE
+    return disk;
 }
 
