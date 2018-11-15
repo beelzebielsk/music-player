@@ -3,6 +3,12 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
+// memset
+#include <math.h>
+#include <fenv.h>
+#include "disk-interface.h"
+
 /* - Naming. Human-readable file names must be mapped to the disk
  *   blocks that they are associated with.
  * - Organization. File systems (typically) have mechanisms humans can
@@ -45,15 +51,44 @@
  *   write a procedure to read all of the persistent DSes.
  */
 
+/* BitVector: A struct representing a vector of bits.
+ *
+ * Members:
+ * ========
+ * length, size_t : The current length of the bit vector, in bits.
+ * capacity, size_t : The current capacity of the bit vector, in bits.
+ *      This is how many bits were actually allocated to the bit
+ *      vector. Is always at least the length of the bv, and a
+ *      multiple of 8 (since space is allocated in bytes).
+ * bits, char * : A pointer to an array of bytes. The bits of each
+ *      byte are the bits of the bitvector.
+ */
 typedef struct {
     size_t length;
-    bool * bits; 
+    size_t capacity;
+    char * bits; 
 } BitVector;
+
+long lceilint(double num) {
+    int oldRoundingStyle = fegetround();
+    fesetround(FE_UPWARD);
+    long result = lrint(num);
+    fesetround(oldRoundingStyle);
+    return result;
+}
 
 BitVector* createBitVector(size_t numBits) {
     BitVector* bv = malloc(sizeof(BitVector));
+    if (!bv) return NULL;
+
+    long vectorSize = lceilint((double)numBits / 8.);
     bv->length = numBits;
-    bv->bits = malloc(sizeof(bool) * numBits);
+    bv->capacity = vectorSize * 8;
+    bv->bits = malloc(sizeof(char) * vectorSize);
+
+    if (bv->bits == NULL) {
+        free(bv); return NULL;
+    }
     return bv;
 }
 
@@ -62,9 +97,64 @@ void freeBitVector(BitVector* bv) {
     free(bv);
 }
 
+/* Returns the amount of space the bit vector will take on disk. This
+ * assumes that the bitvector's capacity is written out, and then the
+ * series of bits (all capacity number of them) are written out. 
+ *
+ * Parameters:
+ * ===========
+ * bv, BitVector* : Pointer to the bitvector to measure.
+ */
+size_t BitVectorSize(BitVector* bv) {
+    if (bv == NULL) return 0;
+    return bv->capacity / 8;
+}
+
+void setBitOfByte(char* v, size_t position, bool bit) {
+    char setWith = 1 << position;
+    if (bit) {
+        *v |= setWith;
+    } else {
+        *v &= ~setWith;
+    }
+}
+
+bool getBitOfByte(char v, size_t position) {
+    return (v & (1 << position)) >> position;
+}
+
+bool setBit(BitVector* v, size_t position, bool bit) {
+    size_t bytePos = position / 8;
+    size_t bitPos = position % 8;
+    setBitOfByte((v->bits) + bytePos, bitPos, bit);
+}
+
+bool getBit(BitVector* v, size_t position) {
+    size_t bytePos = position / 8;
+    size_t bitPos = position % 8;
+    return getBitOfByte(*(v->bits + bytePos), bitPos);
+}
+
+/* Sets the values of all the bits of the bitvector.
+ * Parameters:
+ * ===========
+ * BitVector* v : The vector to set the values for.
+ * bool value : The value to set all the bits to.
+ */
+void setVector(BitVector* v, bool value) {
+    size_t bytes = v->capacity / 8;
+    if (value) {
+        memset(v->bits, (char)0, bytes);
+    } else {
+        memset(v->bits, (char)255, bytes);
+    }
+}
+
 typedef BitVector FreeList;
 
 typedef enum {file, directory} InodeType;
+
+#define BLOCKSPERINODE 12
 
 /* The information contained in an inode should probably be different
  * for directories and files. Directories should contain other Inodes,
@@ -77,11 +167,16 @@ typedef enum {file, directory} InodeType;
  * serialization.
  */
 typedef struct {
-    size_t id;
-    InodeType type;
-    size_t* blocks;
-    Inode* containedNodes;
+    InodeType type; 
+    size_t blocks[BLOCKSPERINODE]; // Data block locations
+    size_t indirectBlock;
+    size_t length; // Bytes in the file
+    size_t numBlocks; // number of allocated blocks
+    size_t linksCount;
 } Inode;
+
+#define INODESIZE 256
+#define NULL_INODE 0
 
 /* Storage of inodes:
  * - In order to make a reasonable filesystem, I have to be able to
@@ -111,18 +206,56 @@ typedef struct {
  * defaults of my file systems is located in /etc/mke2fs.conf:
  * - block size of 4KiB.
  * - inode size of 256 bytes.
- * - inode ratio of 16384. I'm not sure what this is. For mkfs.ext4,
- *   it's bytes/per/inode. I guess that's the inode size? Nope. Create
- *   one inode for every so many bytes on the disk. What the fuck?
- *   Each inode is 256 bytes of size. 16384 = 2^14. So for every 2^14
- *   bytes of space on the disk, there's an inode of 2^8 bytes of
- *   size. How much space is left on the disk for FILES? How does that
- *   ratio even work? Is that for USABLE bytes, or even for the bytes
- *   on which an inode would reside (and other FS information?). The
- *   manpage says not to make the ratio smaller than the blocksize. If
- *   we did, then there'd be more inodes than blocks "since in that
- *   case more inodes would be made than can ever be used". I wonder
- *   why that is, exactly.
+ * - inode ratio of 16384 (one inode per 16 KB of disk space). I'm not
+ *   sure what this is. For mkfs.ext4, it's bytes per inode. I guess
+ *   that's the inode size? Nope. Create one inode for every so many
+ *   bytes on the disk. What the fuck?  Each inode is 256 bytes of
+ *   size. 16384 = 2^14. So for every 2^14 bytes of space on the disk,
+ *   there's an inode of 2^8 bytes of size. How much space is left on
+ *   the disk for FILES? How does that ratio even work? Is that for
+ *   USABLE bytes, or even for the bytes on which an inode would
+ *   reside (and other FS information?). The manpage says not to make
+ *   the ratio smaller than the blocksize. If we did, then there'd be
+ *   more inodes than blocks "since in that case more inodes would be
+ *   made than can ever be used". I wonder why that is, exactly.
  */
+
+/* Will create a filesystem whose total disk size is diskBlocks. From
+ * those blocks, one will be put aside for a superblock, and space for
+ * inodes, and space for data. 
+ *
+ * Parameters:
+ * ===========
+ * diskBlocks, size_t : The number of blocks that the disk will use,
+ *      in total.
+ */
+FILE* mkfs(size_t diskBlocks);
+
+/* - Create a file
+ * - Create a directory
+ * - Allocate a block to a file.
+ * - Allocate an inode to a file.
+ * - Add a new name/inode pair to a directory.
+ * - Read from a regular file.
+ * - Write to a regular file.
+ * - Seek in a regular file.
+ * - open a file.
+ * - close a file.
+ */
+
+/* A struct representing the metadata written to and read from the
+ * filesystem's superblock. The fields which contain "start" in their
+ * name describe the disk block where that data structure starts.
+ */
+struct superBlockData {
+    size_t diskBlocks;
+    size_t numInodes;
+    size_t inodeTableStart;
+    size_t inodeFreeListStart;
+    size_t blockListStart;
+    size_t dataBlocksStart;
+};
+
+void readSuperBlock(struct superBlockData** data, FILE* disk);
 
 #endif
